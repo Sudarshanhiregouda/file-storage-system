@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-storage-backend
+  labels:
+    app: file-storage-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: file-storage-backend
+  template:
+    metadata:
+      labels:
+        app: file-storage-backend
+    spec:
+      containers:
+        - name: file-storage-backend
+          image: file-storage-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: file-storage-config
+            - secretRef:
+                name: file-storage-secrets
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "384Mi"
+            limits:
+              cpu: "1"
+              memory: "768Mi"
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: file-storage-uploads-pvc

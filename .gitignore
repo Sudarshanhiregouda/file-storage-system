@@ -1,0 +1,38 @@
+# Maven build output
+file-storage-service/backend/target/
+
+# Node modules
+file-storage-service/frontend/node_modules/
+file-storage-service/frontend/build/
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+*.env.local
+
+# Spring Boot packaged jar
+*.jar
+*.war
+
+# Local uploaded file storage (binary blobs, not source)
+file-storage-service/backend/uploads/
+
+# Real Kubernetes secrets (keep only secret.example.yaml in git)
+k8s/secret.yaml
+
+# Personal interview prep notes — not part of the project source
+INTERVIEW_PREP_SANDISK.md

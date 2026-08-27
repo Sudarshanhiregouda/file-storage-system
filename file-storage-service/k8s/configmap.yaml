@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: file-storage-config
+  labels:
+    app: file-storage-backend
+data:
+  DB_URL: "jdbc:postgresql://postgres:5432/filestorage"
+  DB_USERNAME: "postgres"
+  SERVER_PORT: "8080"
+  STORAGE_LOCATION: "/app/uploads"
+  CORS_ALLOWED_ORIGIN: "http://localhost:3000"
+  FRONTEND_URL: "http://localhost:3000"
+  JWT_EXPIRATION_MS: "86400000"
