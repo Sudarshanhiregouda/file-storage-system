@@ -10,20 +10,21 @@ SecureDocs AI is a Spring Boot file storage service with permission-aware retrie
 
 ```mermaid
 flowchart LR
-    UI[React UI] -->|Bearer JWT| JWT
-    MCPC[MCP clients<br/>Claude Desktop, VS Code Copilot] -->|Bearer JWT<br/>Streamable HTTP| JWT
-    JWT[JwtAuthFilter<br/>Spring Security] --> FILES["/api/files/**"]
+    UI["React UI"] -->|"Bearer JWT"| JWT
+    MCPC["MCP clients<br/>Claude Desktop, VS Code Copilot"] -->|"Bearer JWT, Streamable HTTP"| JWT
+    JWT["JwtAuthFilter<br/>Spring Security"] --> FILES["/api/files/**"]
     JWT --> ASK["POST /api/ai/ask"]
     JWT --> MCP["/mcp<br/>MCP tools"]
 
-    ASK --> RET[RetrievalService<br/>ownerName == current user<br/>admins: no filter]
+    ASK --> RET["RetrievalService<br/>filter: ownerName = current user<br/>admins: no filter"]
     MCP --> RET
-    ASK -->|only when there are hits| CHAT[ChatClient<br/>Ollama llama3.2]
+    ASK -->|"only when there are hits"| CHAT["ChatClient<br/>Ollama llama3.2"]
 
-    FILES --> FS[FileServiceImpl] --> DB[(PostgreSQL<br/>files, audit log)]
-    FS -. after-commit events<br/>uploaded / archived / restored /<br/>owner changed / purged .-> IDX[DocumentIndexer<br/>@Async bounded pool]
-    IDX -->|parse, split, embed| EMB[EmbeddingModel<br/>Ollama nomic-embed-text]
-    IDX --> VS[(pgvector<br/>vector_store, HNSW, cosine)]
+    FILES --> FS["FileServiceImpl"]
+    FS --> DB[("PostgreSQL<br/>files, audit log")]
+    FS -.->|"after-commit events:<br/>uploaded, archived, restored,<br/>owner changed, purged"| IDX["DocumentIndexer<br/>async bounded pool"]
+    IDX -->|"parse, split, embed"| EMB["EmbeddingModel<br/>Ollama nomic-embed-text"]
+    IDX --> VS[("pgvector<br/>vector_store, HNSW, cosine")]
     RET --> VS
 ```
 
