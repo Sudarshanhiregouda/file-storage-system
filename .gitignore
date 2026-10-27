@@ -36,3 +36,11 @@ k8s/secret.yaml
 
 # Personal interview prep notes — not part of the project source
 INTERVIEW_PREP_SANDISK.md
+
+# IDE
+.settings/
+.project
+.classpath
+.idea/
+*.iml
+.vscode/

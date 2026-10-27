@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: securedocs-postgres
+    environment:
+      POSTGRES_DB: filestorage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password   # local development default, matches application.properties
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d filestorage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

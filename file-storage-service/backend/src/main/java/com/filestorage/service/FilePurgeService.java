@@ -3,11 +3,15 @@ package com.filestorage.service;
 import com.filestorage.entity.FileEntity;
 import com.filestorage.repository.FileRepository;
 import java.time.LocalDateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FilePurgeService {
+
+    private static final Logger log = LoggerFactory.getLogger(FilePurgeService.class);
 
     private final FileRepository fileRepository;
     private final FileStorageService fileStorageService;
@@ -34,6 +38,6 @@ public class FilePurgeService {
         }
 
         int deleted = fileRepository.hardDeleteArchivedBefore(cutoff);
-        System.out.println("[FilePurgeService] Purged " + deleted + " files archived before " + cutoff);
+        log.info("Purged {} files archived before {}", deleted, cutoff);
     }
 }
