@@ -6,6 +6,11 @@ import com.filestorage.dto.FileUpdateDTO;
 import com.filestorage.dto.StatsResponseDTO;
 import com.filestorage.entity.FileAuditLog;
 import com.filestorage.entity.FileEntity;
+import com.filestorage.entity.IndexStatus;
+import com.filestorage.event.FileArchivedEvent;
+import com.filestorage.event.FileOwnerChangedEvent;
+import com.filestorage.event.FileRestoredEvent;
+import com.filestorage.event.FileUploadedEvent;
 import com.filestorage.repository.FileAuditLogRepository;
 import com.filestorage.repository.FileRepository;
 import com.filestorage.security.AuthUtils;
@@ -17,12 +22,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,17 +40,21 @@ public class FileServiceImpl implements FileService {
     private final FileRepository fileRepository;
     private final FileAuditLogRepository auditLogRepository;
     private final FileStorageService fileStorageService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FileServiceImpl(
             FileRepository fileRepository,
             FileAuditLogRepository auditLogRepository,
-            FileStorageService fileStorageService) {
+            FileStorageService fileStorageService,
+            ApplicationEventPublisher eventPublisher) {
         this.fileRepository = fileRepository;
         this.auditLogRepository = auditLogRepository;
         this.fileStorageService = fileStorageService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
+    @Transactional
     public FileResponseDTO createFile(FileRequestDTO requestDTO) {
         FileEntity entity = new FileEntity();
         entity.setFileName(requestDTO.getFileName());
@@ -53,6 +65,8 @@ public class FileServiceImpl implements FileService {
         entity.setIsDeleted(false);
         entity.setCreatedAt(LocalDateTime.now());
         entity.setDeletedAt(null);
+        // Metadata-only record: there is no binary content to index.
+        entity.setIndexStatus(IndexStatus.UNSUPPORTED);
 
         FileEntity saved = fileRepository.save(entity);
         auditLogRepository.save(new FileAuditLog(
@@ -70,6 +84,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @Transactional
     public FileResponseDTO uploadFile(MultipartFile file, String ownerName) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File must not be empty");
@@ -96,12 +111,14 @@ public class FileServiceImpl implements FileService {
         entity.setOwnerName(resolveOwnerForCreate(ownerName));
         entity.setIsDeleted(false);
         entity.setCreatedAt(LocalDateTime.now());
+        entity.setIndexStatus(IndexStatus.PENDING);
 
         FileEntity saved = fileRepository.save(entity);
         auditLogRepository.save(new FileAuditLog(
                 saved.getId(), "UPLOADED", saved.getOwnerName(),
                 "File '" + saved.getFileName() + "' uploaded (" + saved.getFileSize() + " bytes, type: " + saved.getFileType() + ")"
         ));
+        eventPublisher.publishEvent(new FileUploadedEvent(saved.getId()));
         return toResponse(saved);
     }
 
@@ -137,6 +154,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
+    @Transactional
     public void softDelete(Long id) {
         FileEntity entity = fileRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new NoSuchElementException("File not found"));
@@ -149,9 +167,11 @@ public class FileServiceImpl implements FileService {
                 entity.getId(), "ARCHIVED", entity.getOwnerName(),
                 "File '" + entity.getFileName() + "' archived"
         ));
+        eventPublisher.publishEvent(new FileArchivedEvent(entity.getId()));
     }
 
     @Override
+    @Transactional
     public FileResponseDTO restoreFile(Long id) {
         FileEntity entity = fileRepository.findById(id)
                 .filter(FileEntity::getIsDeleted)
@@ -165,15 +185,18 @@ public class FileServiceImpl implements FileService {
                 saved.getId(), "RESTORED", saved.getOwnerName(),
                 "File '" + saved.getFileName() + "' restored from archive"
         ));
+        eventPublisher.publishEvent(new FileRestoredEvent(saved.getId()));
         return toResponse(saved);
     }
 
     @Override
+    @Transactional
     public FileResponseDTO updateFile(Long id, FileUpdateDTO dto) {
         FileEntity entity = fileRepository.findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new NoSuchElementException("File not found"));
         requireOwnerOrAdmin(entity);
 
+        String previousOwner = entity.getOwnerName();
         if (dto.getFileName() != null && !dto.getFileName().isBlank()) {
             entity.setFileName(dto.getFileName());
         }
@@ -187,6 +210,10 @@ public class FileServiceImpl implements FileService {
                 saved.getId(), "UPDATED", saved.getOwnerName(),
                 "File updated: name='" + saved.getFileName() + "', owner='" + saved.getOwnerName() + "'"
         ));
+        if (!Objects.equals(previousOwner, saved.getOwnerName())) {
+            // Chunks carry ownerName in their metadata, so they must be rebuilt for the new owner.
+            eventPublisher.publishEvent(new FileOwnerChangedEvent(saved.getId()));
+        }
         return toResponse(saved);
     }
 
@@ -289,6 +316,7 @@ public class FileServiceImpl implements FileService {
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setDeletedAt(entity.getDeletedAt());
         dto.setDownloadable(entity.getStoragePath() != null);
+        dto.setIndexStatus(entity.getIndexStatus() != null ? entity.getIndexStatus().name() : null);
         return dto;
     }
 }

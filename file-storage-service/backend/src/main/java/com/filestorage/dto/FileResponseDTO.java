@@ -40,6 +40,17 @@ public class FileResponseDTO {
     @JsonProperty("downloadable")
     private Boolean downloadable;
 
+    @JsonProperty("index_status")
+    private String indexStatus;
+
+    public String getIndexStatus() {
+        return indexStatus;
+    }
+
+    public void setIndexStatus(String indexStatus) {
+        this.indexStatus = indexStatus;
+    }
+
     public Long getId() {
         return id;
     }

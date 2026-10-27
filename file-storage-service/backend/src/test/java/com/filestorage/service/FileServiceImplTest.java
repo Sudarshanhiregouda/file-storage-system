@@ -3,7 +3,7 @@ package com.filestorage.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,6 +13,10 @@ import com.filestorage.dto.FileResponseDTO;
 import com.filestorage.dto.FileUpdateDTO;
 import com.filestorage.entity.FileAuditLog;
 import com.filestorage.entity.FileEntity;
+import com.filestorage.event.FileArchivedEvent;
+import com.filestorage.event.FileOwnerChangedEvent;
+import com.filestorage.event.FileRestoredEvent;
+import com.filestorage.event.FileUploadedEvent;
 import com.filestorage.repository.FileAuditLogRepository;
 import com.filestorage.repository.FileRepository;
 import java.time.LocalDateTime;
@@ -26,9 +30,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -49,6 +55,9 @@ class FileServiceImplTest {
 
     @Mock
     private FileStorageService fileStorageService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private FileServiceImpl fileService;
@@ -217,5 +226,93 @@ class FileServiceImplTest {
         assertThat(result.get("content")).isEqualTo(List.of());
         verify(fileRepository).findByIsDeletedFalseAndOwnerNameContainingIgnoreCase(
                 org.mockito.ArgumentMatchers.eq("alice"), any(PageRequest.class));
+    }
+
+    // ---- lifecycle events -------------------------------------------------
+
+    private FileEntity activeFile(Long id, String owner) {
+        FileEntity entity = new FileEntity();
+        entity.setId(id);
+        entity.setOwnerName(owner);
+        entity.setFileName("doc.txt");
+        entity.setIsDeleted(false);
+        return entity;
+    }
+
+    @Test
+    void uploadFile_publishesFileUploadedEvent() throws Exception {
+        loginAs("alice", false);
+        when(fileStorageService.store(any())).thenReturn("stored.txt");
+        when(fileRepository.save(any())).thenAnswer(inv -> {
+            FileEntity e = inv.getArgument(0);
+            e.setId(20L);
+            return e;
+        });
+
+        FileResponseDTO response = fileService.uploadFile(
+                new MockMultipartFile("file", "notes.txt", "text/plain", "hello".getBytes()), null);
+
+        assertThat(response.getIndexStatus()).isEqualTo("PENDING");
+        verify(eventPublisher).publishEvent(new FileUploadedEvent(20L));
+    }
+
+    @Test
+    void softDelete_publishesFileArchivedEvent() {
+        loginAs("alice", false);
+        when(fileRepository.findByIdAndIsDeletedFalse(21L)).thenReturn(Optional.of(activeFile(21L, "alice")));
+
+        fileService.softDelete(21L);
+
+        verify(eventPublisher).publishEvent(new FileArchivedEvent(21L));
+    }
+
+    @Test
+    void restoreFile_publishesFileRestoredEvent() {
+        loginAs("alice", false);
+        FileEntity archived = activeFile(22L, "alice");
+        archived.setIsDeleted(true);
+        archived.setDeletedAt(LocalDateTime.now());
+        when(fileRepository.findById(22L)).thenReturn(Optional.of(archived));
+        when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        fileService.restoreFile(22L);
+
+        verify(eventPublisher).publishEvent(new FileRestoredEvent(22L));
+    }
+
+    @Test
+    void updateFile_publishesOwnerChangedEvent_whenAdminChangesOwner() {
+        loginAs("admin", true);
+        when(fileRepository.findByIdAndIsDeletedFalse(23L)).thenReturn(Optional.of(activeFile(23L, "alice")));
+        when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        FileUpdateDTO update = new FileUpdateDTO();
+        update.setOwnerName("bob");
+        fileService.updateFile(23L, update);
+
+        verify(eventPublisher).publishEvent(new FileOwnerChangedEvent(23L));
+    }
+
+    @Test
+    void updateFile_publishesNothing_whenOwnerUnchanged() {
+        loginAs("admin", true);
+        when(fileRepository.findByIdAndIsDeletedFalse(24L)).thenReturn(Optional.of(activeFile(24L, "alice")));
+        when(fileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        FileUpdateDTO update = new FileUpdateDTO();
+        update.setFileName("renamed.txt");
+        update.setOwnerName("alice");
+        fileService.updateFile(24L, update);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void softDelete_publishesNothing_whenForbidden() {
+        loginAs("mallory", false);
+        when(fileRepository.findByIdAndIsDeletedFalse(25L)).thenReturn(Optional.of(activeFile(25L, "alice")));
+
+        assertThatThrownBy(() -> fileService.softDelete(25L)).isInstanceOf(ResponseStatusException.class);
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 }

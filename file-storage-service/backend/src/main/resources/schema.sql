@@ -41,3 +41,10 @@ CREATE TABLE IF NOT EXISTS users (
     auth_provider VARCHAR(20) NOT NULL DEFAULT 'LOCAL',
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Search indexing status (kept in sync by the async indexer)
+ALTER TABLE files ADD COLUMN IF NOT EXISTS index_status VARCHAR(20) DEFAULT 'PENDING';
+ALTER TABLE files ADD COLUMN IF NOT EXISTS chunk_count INT;
+ALTER TABLE files ADD COLUMN IF NOT EXISTS index_error TEXT;
+-- Hibernate may have added index_status without the default; backfill older rows
+UPDATE files SET index_status = 'PENDING' WHERE index_status IS NULL;

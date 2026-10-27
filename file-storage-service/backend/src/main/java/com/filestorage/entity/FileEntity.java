@@ -1,7 +1,9 @@
-    package com.filestorage.entity;
+package com.filestorage.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -59,6 +61,40 @@ public class FileEntity {
 
     @Column(name = "storage_path", length = 255)
     private String storagePath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "index_status", length = 20)
+    private IndexStatus indexStatus = IndexStatus.PENDING;
+
+    @Column(name = "chunk_count")
+    private Integer chunkCount;
+
+    @Column(name = "index_error", columnDefinition = "TEXT")
+    private String indexError;
+
+    public IndexStatus getIndexStatus() {
+        return indexStatus;
+    }
+
+    public void setIndexStatus(IndexStatus indexStatus) {
+        this.indexStatus = indexStatus;
+    }
+
+    public Integer getChunkCount() {
+        return chunkCount;
+    }
+
+    public void setChunkCount(Integer chunkCount) {
+        this.chunkCount = chunkCount;
+    }
+
+    public String getIndexError() {
+        return indexError;
+    }
+
+    public void setIndexError(String indexError) {
+        this.indexError = indexError;
+    }
 
     public Long getId() {
         return id;
