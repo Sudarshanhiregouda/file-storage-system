@@ -27,6 +27,11 @@ kubectl apply -f service.yaml
 
 ## Notes
 
+- The bundled Postgres uses the `pgvector/pgvector:pg16` image, because the app stores
+  document embeddings in pgvector (the `vector_store` table is created on startup).
+- `OLLAMA_BASE_URL` in the ConfigMap must point at a reachable Ollama server with
+  `nomic-embed-text` and the chat model (`AI_CHAT_MODEL`) pulled. No Ollama manifest is included.
+
 - `deployment.yaml` pulls all env vars from the `ConfigMap` + `Secret` via `envFrom`,
   matching the `${VAR:default}` placeholders in `application.properties`.
 - Readiness/liveness probes hit `/actuator/health`, which is `permitAll` in

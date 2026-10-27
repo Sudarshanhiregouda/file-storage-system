@@ -23,15 +23,20 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Build and run unit tests
+      # Unit tests run in `test` (Surefire). *IT classes run in `integration-test` (Failsafe)
+      # against a real pgvector/pgvector:pg16 container via Testcontainers; Docker is available
+      # on ubuntu-latest. Embeddings are faked and the chat model is mocked, so no Ollama is needed.
+      - name: Build, unit tests and Testcontainers integration tests
         run: mvn -B -ntp verify
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-surefire-reports
-          path: file-storage-service/backend/target/surefire-reports
+          name: backend-test-reports
+          path: |
+            file-storage-service/backend/target/surefire-reports
+            file-storage-service/backend/target/failsafe-reports
           if-no-files-found: ignore
 
   frontend:
