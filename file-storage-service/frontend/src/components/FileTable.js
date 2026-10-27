@@ -18,6 +18,22 @@ function StatusChip({ status }) {
   return <span className={cls}>{status}</span>;
 }
 
+const INDEX_LABELS = {
+  INDEXED: "Searchable",
+  PENDING: "Indexing…",
+  FAILED: "Index failed",
+  UNSUPPORTED: "Not searchable",
+};
+
+function IndexChip({ status }) {
+  if (!status) return null;
+  return (
+    <span className={`index-chip index-${status.toLowerCase()}`} title={`Search index: ${status}`}>
+      {INDEX_LABELS[status] || status}
+    </span>
+  );
+}
+
 function FileTable({ files, onDelete, onEdit, onDownload }) {
   return (
     <table>
@@ -46,7 +62,10 @@ function FileTable({ files, onDelete, onEdit, onDownload }) {
               <td><span className="type-badge">{file.file_type}</span></td>
               <td>{formatSize(file.file_size)}</td>
               <td>{file.owner_name}</td>
-              <td><StatusChip status={file.status || "ACTIVE"} /></td>
+              <td>
+                <StatusChip status={file.status || "ACTIVE"} />
+                <IndexChip status={file.index_status} />
+              </td>
               <td>{formatDate(file.created_at)}</td>
               <td style={{ display: "flex", gap: 6 }}>
                 {file.downloadable && (

@@ -3,6 +3,7 @@ import AuthPanel from "./components/AuthPanel";
 import UploadForm from "./components/UploadForm";
 import FileTable from "./components/FileTable";
 import StatsPanel from "./components/StatsPanel";
+import AskPanel from "./components/AskPanel";
 import {
   downloadFile, getAuditLog, getDeletedFiles, getFiles, getStats, getToken,
   logout, restoreFile, setToken, softDeleteFile, updateFile, uploadBinaryFile,
@@ -38,7 +39,7 @@ function App() {
   const [auditLog, setAuditLog] = useState([]);
 
   const isAdmin = user?.role === "ADMIN";
-  const tabs = isAdmin ? ["Files", "Stats", "Deleted Files", "Audit Log"] : ["Files"];
+  const tabs = isAdmin ? ["Files", "Ask", "Stats", "Deleted Files", "Audit Log"] : ["Files", "Ask"];
 
   useEffect(() => {
     if (window.location.pathname === "/oauth2/redirect") {
@@ -232,6 +233,20 @@ function App() {
       .btn-restore { background: #2f5f9f; color: #fff; }
       .user-badge { font-size: 13px; color: #5e554c; display: flex; align-items: center; gap: 10px; }
       .role-chip { background: #2f5f9f1a; color: #2f5f9f; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+      .index-chip { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+      .index-indexed { background: #dff2e7; color: #1f6e48; }
+      .index-pending { background: #fff4d6; color: #8a6200; }
+      .index-failed { background: #fde3dc; color: #a33a20; }
+      .index-unsupported { background: #f0ede8; color: #66554a; }
+      .ask-panel h3 { margin-top: 0; }
+      .ask-panel textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #bfb6ac; font: inherit; resize: vertical; }
+      .ask-actions { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 12px; color: #777; }
+      .ask-answer { white-space: pre-wrap; line-height: 1.5; background: var(--accent-soft); border-radius: 10px; padding: 12px 14px; }
+      .ask-answer-empty { background: #f0ede8; color: #5e554c; }
+      .ask-sources { padding-left: 20px; }
+      .ask-sources li { margin-bottom: 10px; }
+      .ask-sources p { margin: 4px 0 0; font-size: 13px; color: #5e554c; }
+      .ask-score { margin-left: 8px; font-size: 12px; color: #888; }
     `}</style>
   );
 
@@ -290,6 +305,8 @@ function App() {
           </div>
         </div>
       )}
+
+      {activeTab === "Ask" && <AskPanel />}
 
       {activeTab === "Stats" && <StatsPanel stats={stats} />}
 

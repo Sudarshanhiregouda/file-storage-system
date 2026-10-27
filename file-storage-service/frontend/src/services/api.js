@@ -159,3 +159,16 @@ export async function getAuditLog() {
   const response = await fetch(`${API_BASE_URL}/audit`, { headers: authHeaders() });
   return handleJsonResponse(response);
 }
+
+const AI_BASE_URL = `${API_ROOT}/api/ai`;
+
+// Asks a question about the signed-in user's own documents.
+// Errors from this endpoint are RFC 7807 problem details: { title, status, detail }.
+export async function askQuestion(question, topK) {
+  const response = await fetch(`${AI_BASE_URL}/ask`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(topK ? { question, topK } : { question }),
+  });
+  return handleJsonResponse(response);
+}
