@@ -58,4 +58,22 @@ public interface FileRepository extends JpaRepository<FileEntity, Long> {
     int hardDeleteArchivedBefore(@org.springframework.data.repository.query.Param("cutoff") java.time.LocalDateTime cutoff);
 
     List<FileEntity> findByIsDeletedTrueAndDeletedAtBefore(java.time.LocalDateTime cutoff);
+
+    /** Active files owned by exactly this user (case-sensitive, unlike the UI filter above). */
+    List<FileEntity> findByIsDeletedFalseAndOwnerNameOrderByCreatedAtDesc(String ownerName);
+
+    List<FileEntity> findByIsDeletedFalseOrderByCreatedAtDesc();
+
+    /**
+     * Updates only the indexing columns, so a concurrent rename or archive
+     * is never overwritten by the background indexer.
+     */
+    @Modifying
+    @Transactional
+    @Query(value = "UPDATE files SET index_status = :status, chunk_count = :chunkCount, index_error = :error WHERE id = :id",
+            nativeQuery = true)
+    int updateIndexStatus(@org.springframework.data.repository.query.Param("id") Long id,
+                          @org.springframework.data.repository.query.Param("status") String status,
+                          @org.springframework.data.repository.query.Param("chunkCount") Integer chunkCount,
+                          @org.springframework.data.repository.query.Param("error") String error);
 }

@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -50,6 +52,15 @@ public class FileStorageService {
             throw new IllegalArgumentException("Invalid stored file reference");
         }
         return target;
+    }
+
+    /** Opens stored content as a Spring Resource, so readers don't depend on the storage backend. */
+    public Resource loadAsResource(String storedName) throws IOException {
+        Path target = resolve(storedName);
+        if (!Files.isReadable(target)) {
+            throw new IOException("Stored file is missing");
+        }
+        return new FileSystemResource(target);
     }
 
     public void delete(String storedName) {
