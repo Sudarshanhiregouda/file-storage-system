@@ -8,24 +8,17 @@ import com.filestorage.event.FilePurgedEvent;
 import com.filestorage.event.FileRestoredEvent;
 import com.filestorage.event.FileUploadedEvent;
 import com.filestorage.repository.FileRepository;
-import com.filestorage.service.FileStorageService;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
-import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
-import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -49,26 +42,17 @@ public class DocumentIndexer {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentIndexer.class);
 
-    static final Set<String> SUPPORTED_TYPES = Set.of("PDF", "DOCX", "TXT", "MD");
     static final int BATCH_SIZE = 50;
     private static final int MAX_ERROR_LENGTH = 500;
 
     private final VectorStore vectorStore;
     private final FileRepository fileRepository;
-    private final FileStorageService fileStorageService;
-    private final TokenTextSplitter splitter;
+    private final DocumentParser parser;
 
-    public DocumentIndexer(VectorStore vectorStore, FileRepository fileRepository, FileStorageService fileStorageService) {
+    public DocumentIndexer(VectorStore vectorStore, FileRepository fileRepository, DocumentParser parser) {
         this.vectorStore = vectorStore;
         this.fileRepository = fileRepository;
-        this.fileStorageService = fileStorageService;
-        this.splitter = TokenTextSplitter.builder()
-                .withChunkSize(500)
-                .withMinChunkSizeChars(200)
-                .withMinChunkLengthToEmbed(5)
-                .withMaxNumChunks(10_000)
-                .withKeepSeparator(true)
-                .build();
+        this.parser = parser;
     }
 
     // ---- event listeners --------------------------------------------------
@@ -100,6 +84,7 @@ public class DocumentIndexer {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onArchived(FileArchivedEvent event) {
         deleteChunks(List.of(event.fileId()));
+        // Not in the index any more; restore will index it again.
         fileRepository.updateIndexStatus(event.fileId(), IndexStatus.PENDING.name(), null, null);
     }
 
@@ -119,22 +104,17 @@ public class DocumentIndexer {
             return;
         }
         FileEntity file = found.get();
-        String type = file.getFileType() == null ? "" : file.getFileType().toUpperCase(Locale.ROOT);
 
-        if (file.getStoragePath() == null || !SUPPORTED_TYPES.contains(type)) {
+        if (!parser.isSupported(file)) {
             deleteChunks(List.of(fileId));
             fileRepository.updateIndexStatus(fileId, IndexStatus.UNSUPPORTED.name(), 0, null);
-            log.info("File {} not indexed: unsupported type {}", fileId, type);
+            log.info("File {} not indexed: unsupported type {}", fileId, file.getFileType());
             return;
         }
 
         try {
             long start = System.currentTimeMillis();
-            Resource resource = fileStorageService.loadAsResource(file.getStoragePath());
-            List<Document> pages = "PDF".equals(type)
-                    ? new PagePdfDocumentReader(resource).get()
-                    : new TikaDocumentReader(resource).get();
-            List<Document> chunks = toChunks(file, splitter.apply(pages), "PDF".equals(type));
+            List<Document> chunks = parser.parse(file).stream().map(c -> toDocument(file, c)).toList();
 
             // Replace, never append: re-indexing must not leave old chunks (e.g. with the old owner).
             deleteChunks(List.of(fileId));
@@ -154,7 +134,7 @@ public class DocumentIndexer {
 
             fileRepository.updateIndexStatus(fileId, IndexStatus.INDEXED.name(), chunks.size(), null);
             log.info("Indexed file {} ({}) into {} chunks in {} ms",
-                    fileId, type, chunks.size(), System.currentTimeMillis() - start);
+                    fileId, file.getFileType(), chunks.size(), System.currentTimeMillis() - start);
         } catch (Exception e) {
             String error = shortError(e);
             fileRepository.updateIndexStatus(fileId, IndexStatus.FAILED.name(), null, error);
@@ -162,29 +142,17 @@ public class DocumentIndexer {
         }
     }
 
-    /** Builds clean chunks carrying only our metadata keys (reader metadata like source paths is dropped). */
-    private List<Document> toChunks(FileEntity file, List<Document> splits, boolean pdf) {
-        List<Document> chunks = new ArrayList<>(splits.size());
-        int chunkIndex = 0;
-        for (Document split : splits) {
-            String text = split.getText();
-            if (text == null || text.isBlank()) {
-                continue;
-            }
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put(ChunkMetadata.FILE_ID, file.getId());
-            metadata.put(ChunkMetadata.OWNER_NAME, file.getOwnerName());
-            metadata.put(ChunkMetadata.FILE_NAME, file.getFileName());
-            metadata.put(ChunkMetadata.CHUNK_INDEX, chunkIndex++);
-            if (pdf) {
-                Object page = split.getMetadata().get(PagePdfDocumentReader.METADATA_START_PAGE_NUMBER);
-                if (page != null) {
-                    metadata.put(ChunkMetadata.PAGE, page);
-                }
-            }
-            chunks.add(Document.builder().text(text).metadata(metadata).build());
+    /** A chunk carries only our metadata keys (reader metadata such as source paths is dropped). */
+    private static Document toDocument(FileEntity file, DocumentParser.Chunk chunk) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put(ChunkMetadata.FILE_ID, file.getId());
+        metadata.put(ChunkMetadata.OWNER_NAME, file.getOwnerName());
+        metadata.put(ChunkMetadata.FILE_NAME, file.getFileName());
+        metadata.put(ChunkMetadata.CHUNK_INDEX, chunk.index());
+        if (chunk.page() != null) {
+            metadata.put(ChunkMetadata.PAGE, chunk.page());
         }
-        return chunks;
+        return Document.builder().text(chunk.text()).metadata(metadata).build();
     }
 
     void deleteChunks(List<Long> fileIds) {

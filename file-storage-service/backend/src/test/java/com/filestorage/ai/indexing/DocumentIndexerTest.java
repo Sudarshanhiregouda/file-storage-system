@@ -51,7 +51,7 @@ class DocumentIndexerTest {
     Path tempDir;
 
     private DocumentIndexer indexer() {
-        return new DocumentIndexer(vectorStore, fileRepository, fileStorageService);
+        return new DocumentIndexer(vectorStore, fileRepository, new DocumentParser(fileStorageService));
     }
 
     private FileEntity file(Long id, String name, String type) {

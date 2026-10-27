@@ -18,7 +18,8 @@ Each entry: what I chose, what I didn't, why, and when I'd change my mind. The "
 
 ### 4. Identity comes from the JWT, never from the request body, tool arguments or the model
 - **Why:** tool arguments are written by the model, and the model can be steered by prompt injection ("search as admin"). Authorization must come from something the model can't control: the authenticated principal.
-- **Detail I checked:** whether Spring Security's context is available inside MCP tool execution. (Say what you found in Step 6.)
+- **Detail I checked:** whether Spring Security's context is available inside MCP tool execution. It is. With the WebMVC Streamable HTTP transport and a SYNC server, Spring AI 1.1 runs the tool method on the same servlet request thread that `JwtAuthFilter` authenticated (a temporary probe logged `thread=http-nio-…-exec-5 authenticated=true`). So `AuthUtils.currentUsername()` works inside tools and no MCP transport-context propagation was needed. `McpSecurityIT` locks this in: it calls the tools over real HTTP with the MCP Java SDK client and checks owner scoping, and that a connection without a token is rejected.
+- **Change it when:** switching to the async (WebFlux) server or a transport that executes tools on another thread. Then a ThreadLocal security context is gone and identity must be carried through the MCP transport context instead.
 
 ### 5. Filter inside the vector query, not after retrieval
 - **Why:** filtering after top-K silently shrinks results (if 4 of 5 hits belong to someone else, the user gets 1) and leaks data if anyone forgets the filter. Filtering in the query keeps top-K full and correct.
