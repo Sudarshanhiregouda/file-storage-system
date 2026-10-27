@@ -28,6 +28,8 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -37,6 +39,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * Listens to file-domain events only after the database transaction commits, so a rolled-back
  * upload is never indexed, and does the slow work (parse, split, embed) on the bounded indexing pool.
  * The relational {@code files} table is the source of truth; the vector index is a derived view.
+ * <p>
+ * {@code NOT_SUPPORTED} matters when a listener runs on the publishing thread (synchronous executor,
+ * or CallerRunsPolicy under load): the committed transaction's resources are still bound there, and
+ * without suspending them our writes would join a transaction that never commits again.
  */
 @Component
 public class DocumentIndexer {
@@ -69,18 +75,21 @@ public class DocumentIndexer {
 
     @Async(AsyncConfig.INDEXING_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onUploaded(FileUploadedEvent event) {
         index(event.fileId());
     }
 
     @Async(AsyncConfig.INDEXING_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onRestored(FileRestoredEvent event) {
         index(event.fileId());
     }
 
     @Async(AsyncConfig.INDEXING_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onOwnerChanged(FileOwnerChangedEvent event) {
         // ownerName is baked into chunk metadata, so the chunks are rebuilt for the new owner.
         index(event.fileId());
@@ -88,6 +97,7 @@ public class DocumentIndexer {
 
     @Async(AsyncConfig.INDEXING_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onArchived(FileArchivedEvent event) {
         deleteChunks(List.of(event.fileId()));
         fileRepository.updateIndexStatus(event.fileId(), IndexStatus.PENDING.name(), null, null);
@@ -95,6 +105,7 @@ public class DocumentIndexer {
 
     @Async(AsyncConfig.INDEXING_EXECUTOR)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void onPurged(FilePurgedEvent event) {
         deleteChunks(event.fileIds());
     }
