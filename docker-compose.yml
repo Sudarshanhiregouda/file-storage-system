@@ -7,7 +7,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password   # local development default, matches application.properties
     ports:
-      - "5432:5432"
+      # Set POSTGRES_PORT=5433 (and DB_URL to match) if a local Postgres already uses 5432
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

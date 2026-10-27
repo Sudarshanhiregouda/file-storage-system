@@ -67,6 +67,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/oauth2/**", "/login/**", "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api/files/stats", "/api/files/audit", "/api/files/deleted").hasRole("ADMIN")
                 .requestMatchers("/api/files/**").authenticated()
+                // AI endpoints: identity for owner-scoped retrieval comes from this authentication
+                .requestMatchers("/api/ai/**", "/mcp", "/mcp/**").authenticated()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
